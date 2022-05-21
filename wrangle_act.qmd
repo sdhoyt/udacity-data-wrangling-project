@@ -1,0 +1,502 @@
+---
+jupyter: python3
+---
+
+# Project: Wrangling and Analyze Data
+
+## Data Gathering
+In the cell below, gather **all** three pieces of data for this project and load them in the notebook. **Note:** the methods required to gather each data are different.
+1. Directly download the WeRateDogs Twitter archive data (twitter_archive_enhanced.csv)
+
+```{python}
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+%matplotlib inline
+import requests
+import json
+```
+
+```{python}
+#| extensions: {jupyter_dashboards: {version: 1, views: {grid_default: {hidden: true}, report_default: {hidden: true}}}}
+twitter_archive = pd.read_csv("twitter-archive-enhanced.csv")
+```
+
+2. Use the Requests library to download the tweet image prediction (image_predictions.tsv)
+
+```{python}
+imag_pred = requests.get("https://d17h27t6h515a5.cloudfront.net/topher/2017/August/599fd2ad_image-predictions/image-predictions.tsv")
+with open("image_predictions.tsv", "wb") as f:
+    f.write(imag_pred.content)
+```
+
+```{python}
+image_predictions = pd.read_csv("image_predictions.tsv", sep="\t")
+```
+
+3. Use the Tweepy library to query additional data via the Twitter API (tweet_json.txt)
+
+The code for the Twitter API is below, however it is commented out because I was not able to get the elevated privledges needed to use the API
+
+```{python}
+#import tweepy
+#from tweepy import OAuthHandler
+#import json
+#from timeit import default_timer as timer
+#
+# Query Twitter API for each tweet in the Twitter archive and save JSON in a text file
+# These are hidden to comply with Twitter's API terms and conditions
+#consumer_key = 'HIDDEN'
+#consumer_secret = 'HIDDEN'
+#access_token = 'HIDDEN'
+#access_secret = 'HIDDEN'
+#
+#auth = OAuthHandler(consumer_key, consumer_secret)
+#auth.set_access_token(access_token, access_secret)
+#
+#api = tweepy.API(auth, wait_on_rate_limit=True)
+#
+# NOTE TO STUDENT WITH MOBILE VERIFICATION ISSUES:
+# df_1 is a DataFrame with the twitter_archive_enhanced.csv file. You may have to
+# change line 17 to match the name of your DataFrame with twitter_archive_enhanced.csv
+# NOTE TO REVIEWER: this student had mobile verification issues so the following
+# Twitter API code was sent to this student from a Udacity instructor
+# Tweet IDs for which to gather additional data via Twitter's API
+#tweet_ids = df_1.tweet_id.values
+#len(tweet_ids)
+
+# Query Twitter's API for JSON data for each tweet ID in the Twitter archive
+#count = 0
+#fails_dict = {}
+#start = timer()
+# Save each tweet's returned JSON as a new line in a .txt file
+#with open('tweet_json.txt', 'w') as outfile:
+#    # This loop will likely take 20-30 minutes to run because of Twitter's rate limit
+#    for tweet_id in tweet_ids:
+#        count += 1
+#        print(str(count) + ": " + str(tweet_id))
+#        try:
+#            tweet = api.get_status(tweet_id, tweet_mode='extended')
+#            print("Success")
+#            json.dump(tweet._json, outfile)
+#            outfile.write('\n')
+#        except tweepy.TweepError as e:
+#            print("Fail")
+#            fails_dict[tweet_id] = e
+#            pass
+#end = timer()
+#print(end - start)
+#print(fails_dict)
+```
+
+```{python}
+tweets = requests.get('https://video.udacity-data.com/topher/2018/November/5be5fb7d_tweet-json/tweet-json.txt')
+with open('tweet_json.txt', 'wb') as f:
+        f.write(tweets.content)
+```
+
+```{python}
+tweet_data = pd.read_json('tweet_json.txt', lines=True)
+```
+
+## Assessing Data
+In this section, detect and document at least **eight (8) quality issues and two (2) tidiness issue**. You must use **both** visual assessment
+programmatic assessement to assess the data.
+
+**Note:** pay attention to the following key points when you access the data.
+
+* You only want original ratings (no retweets) that have images. Though there are 5000+ tweets in the dataset, not all are dog ratings and some are retweets.
+* Assessing and cleaning the entire dataset completely would require a lot of time, and is not necessary to practice and demonstrate your skills in data wrangling. Therefore, the requirements of this project are only to assess and clean at least 8 quality issues and at least 2 tidiness issues in this dataset.
+* The fact that the rating numerators are greater than the denominators does not need to be cleaned. This [unique rating system](http://knowyourmeme.com/memes/theyre-good-dogs-brent) is a big part of the popularity of WeRateDogs.
+* You do not need to gather the tweets beyond August 1st, 2017. You can, but note that you won't be able to gather the image predictions for these tweets since you don't have access to the algorithm used.
+
+
+```{python}
+twitter_archive.head()
+```
+
+Looks like I can use when retweeted_status_id is not null to determine which tweets are retweets. We do not want retweets in this dataset.
+
+```{python}
+twitter_archive.info()
+```
+
+```{python}
+twitter_archive[twitter_archive.retweeted_status_id.notnull()].head()
+```
+
+Looks like doggo, floofer, pupper, puppo are different "types" of dogs.
+
+```{python}
+twitter_archive[twitter_archive.doggo != "None"].head()
+```
+
+```{python}
+image_predictions.info()
+```
+
+Looks like the dog breeds and other obejcts appear multiple times. These could be considered categories
+
+```{python}
+image_predictions.p3.value_counts()
+```
+
+```{python}
+image_predictions[image_predictions['p2_dog'] == False]
+```
+
+```{python}
+tweet_data.info()
+```
+
+```{python}
+#| scrolled: true
+twitter_archive.name
+```
+
+```{python}
+tweet_data.id
+```
+
+### Quality issues
+1. There are retweets in the dataset
+
+2. twitter archive timestamp is a string not a time
+
+3. image prediction p1, p2, p3 are strings, not categories
+
+4. all tweet ids are ints, but is not useful mathematically
+
+5. the twitter archive source column has html in it.
+
+6. The source column seems categorical, but is a string.
+
+7. Some dog beeds in the image predictions are lower case and some are upper case
+
+8. Some of the dog names in tweet_data are not names ("None", "the", "a")
+
+### Tidiness issues
+1. doggo, floofer pupper, puppo are columns rather than values in a single column.
+
+2. The tweet archive and tweet data are separate tables
+
+## Cleaning Data
+In this section, clean **all** of the issues you documented while assessing. 
+
+**Note:** Make a copy of the original data before cleaning. Cleaning includes merging individual pieces of data according to the rules of [tidy data](https://cran.r-project.org/web/packages/tidyr/vignettes/tidy-data.html). The result should be a high-quality and tidy master pandas DataFrame (or DataFrames, if appropriate).
+
+```{python}
+# Make copies of original pieces of data
+twitter_archive_clean = twitter_archive.copy()
+tweet_data_clean = tweet_data.copy()
+image_predictions_clean = image_predictions.copy()
+```
+
+### Issue #1:
+
+#### The tweet id and id are integers, but they are not useful mathematically in any way. Because these are references/identifiers for the tweets, they should be strings. We will change each tweet id to a string.
+
+#### Code
+
+```{python}
+twitter_archive_clean.tweet_id = twitter_archive_clean.tweet_id.astype(str)
+tweet_data_clean.id = tweet_data_clean.id.astype(str)
+image_predictions_clean.tweet_id = image_predictions_clean.tweet_id.astype(str)
+```
+
+#### Test
+
+```{python}
+assert twitter_archive_clean.tweet_id.dtype == pd.Series(dtype=str).dtype
+assert tweet_data_clean.id.dtype == pd.Series(dtype=str).dtype
+assert image_predictions_clean.tweet_id.dtype == pd.Series(dtype=str).dtype
+```
+
+### Issue #2:
+
+#### The tweet archive and tweet data are separate tables. These should be combined into one so we have one table containing all of the twitter data.
+
+#### Code
+
+Change the name of the id column in twee_data from id to tweet_id to help with the merge.
+
+```{python}
+tweet_data_clean.rename(columns={"id":"tweet_id"}, inplace=True)
+```
+
+```{python}
+tweet_data_clean.info()
+```
+
+```{python}
+twitter_archive_clean.info()
+```
+
+```{python}
+full_tweet_data_clean = pd.merge(twitter_archive_clean, tweet_data_clean[["tweet_id", "retweet_count", "favorite_count"]], on="tweet_id", how="left")
+```
+
+There are two tweets from the twitter_archive_clean that were not present in the tweet_data_clean, however, these tweets are retweets, so the will soon be removed and we can ignore them for now.
+
+```{python}
+full_tweet_data_clean[full_tweet_data_clean.favorite_count.isnull()]
+```
+
+#### Test
+
+We can see from .info() that the tables were merged.
+
+```{python}
+full_tweet_data_clean.info()
+```
+
+### Issue #3:
+
+#### The retweets in the dataset should be removed because we only care about dog rating tweets.
+
+#### Code
+
+We can use the retweeted_status_id column to help remove any retweets. If this column is not null, then it is a retweet.
+
+```{python}
+full_tweet_data_clean = full_tweet_data_clean[full_tweet_data_clean.retweeted_status_id.isnull()]
+```
+
+#### Test
+
+test to ensure that every value in retweeted_status_id is null (meaning none are retweets)
+
+```{python}
+assert all(full_tweet_data_clean.retweeted_status_id.isnull())
+```
+
+### Issue #4:
+
+#### the timestamp is a string, not a time. This should be converted to a time object
+
+#### Code
+
+```{python}
+full_tweet_data_clean.timestamp = pd.to_datetime(full_tweet_data_clean.timestamp)
+```
+
+#### Test
+
+We can see from .info() that the timestamp column is now a datetime.
+
+```{python}
+full_tweet_data_clean.info()
+```
+
+### Issue #5
+
+#### the image predictions p1, p2, p3 should be converted from strings to categories
+
+#### Code
+
+```{python}
+image_predictions_clean.p1 = image_predictions_clean.p1.astype('category')
+image_predictions_clean.p2 = image_predictions_clean.p2.astype('category')
+image_predictions_clean.p3 = image_predictions_clean.p3.astype('category')
+```
+
+#### Test
+
+The p1, p2, p3 columsn are now of type category
+
+```{python}
+image_predictions_clean.info()
+```
+
+### Issue #6
+
+#### the source column should have the html removed and the source converted to a cateogory
+
+#### Code
+
+```{python}
+full_tweet_data_clean.source[0]
+```
+
+Using a regular expression to get the text inside the html tag in the source column (regex source: https://stackoverflow.com/questions/33120584/python-regex-find-string-between-html-tags)
+
+```{python}
+full_tweet_data_clean["source"] = full_tweet_data_clean.source.str.extract(r'>(.+?)<')
+```
+
+#### Test
+
+We can get the value_counts for the source column to confirm that the sources were properly extracted from the html tag.
+
+```{python}
+full_tweet_data_clean.source.value_counts()
+```
+
+### Issue #7
+
+#### The source column is a string, but should be converted to a category.
+
+#### Code
+
+```{python}
+full_tweet_data_clean.source = full_tweet_data_clean.source.astype('category')
+```
+
+#### Test
+
+We can use .info() to confirm that the source column has been converted to a category
+
+```{python}
+full_tweet_data_clean.info()
+```
+
+### Issue #8
+
+#### Some dog beeds in the image predictions are lower case and some are upper case. These should be changed to all lower case for consistency.
+
+#### Code
+
+```{python}
+image_predictions_clean.p1 = image_predictions_clean.p1.str.lower()
+image_predictions_clean.p2 = image_predictions_clean.p2.str.lower()
+image_predictions_clean.p3 = image_predictions_clean.p3.str.lower()
+```
+
+#### Test
+
+.islower() returns True if all characters are lower case and false if at least one is not lower case. Using this method, we can confirm that all were converted to lower.
+
+```{python}
+assert all(image_predictions_clean.p1.str.islower())
+```
+
+### Issue #9
+
+#### Some of the dog names in tweet_data are not names ("None", "the", "a"). These should all be made null to indicate that there is no name available.
+
+#### Code
+
+```{python}
+full_tweet_data_clean.name = full_tweet_data_clean.name.replace(["None", "a", "an", "the", "quite"], np.nan)
+```
+
+#### Test
+
+Looking at value counts and some samples, we can check to make sure these values are gone. This doesn't necesarrily mean that all non-names are gone, but it looks like we removed the bulk of the issue and we can iterate and remove more later if more are found.
+
+```{python}
+full_tweet_data_clean.name.value_counts()
+```
+
+```{python}
+full_tweet_data_clean.name.sample(10)
+```
+
+### Issue #10
+
+#### doggo, floofer pupper, puppo are columns rather than values in a single column. There should be a single column containing each type.
+
+#### Code
+
+First we'll replace all the None values with empty strings to help with concatenating the column text
+
+```{python}
+full_tweet_data_clean["doggo"] = full_tweet_data_clean["doggo"].replace("None", "")
+full_tweet_data_clean["floofer"] = full_tweet_data_clean["floofer"].replace("None", "")
+full_tweet_data_clean["pupper"] = full_tweet_data_clean["pupper"].replace("None", "")
+full_tweet_data_clean["puppo"] = full_tweet_data_clean["puppo"].replace("None", "")
+```
+
+Then we'll concatentate all the columns into a new columns called dog_stage
+
+```{python}
+full_tweet_data_clean["dog_stage"] = full_tweet_data_clean.doggo.map(str) + full_tweet_data_clean.floofer.map(str) + full_tweet_data_clean.pupper.map(str) + full_tweet_data_clean.puppo.map(str)
+```
+
+Then we'll go back and replace the empty strings back to nans 
+
+```{python}
+full_tweet_data_clean["dog_stage"] = full_tweet_data_clean["dog_stage"].replace("", np.nan)
+```
+
+Then drop the old columns
+
+```{python}
+full_tweet_data_clean.drop(columns=["doggo", "floofer", "pupper", "puppo"], inplace=True)
+```
+
+From the value counts we can see that there are a few instances of different stages in the same observations. We can make the convention that any conflicts containing the doggo stage will be resolved by using the doggo stage.
+
+```{python}
+full_tweet_data_clean.dog_stage.value_counts()
+```
+
+Using a regular expression, we can replace the values that start with doggo, to only use the doggo type.
+
+```{python}
+full_tweet_data_clean.dog_stage = full_tweet_data_clean.dog_stage.replace(r'doggo\w+', 'doggo', regex=True)
+```
+
+We can then convert this column to be of category type.
+
+```{python}
+full_tweet_data_clean.dog_stage = full_tweet_data_clean.dog_stage.astype('category')
+```
+
+#### Test
+
+We can use .info() to check that the old columns were removed, the new column exists and it is a category type
+
+```{python}
+full_tweet_data_clean.info()
+```
+
+Then we can use value_counts to make sure the correct values are being used in the dog_stage column
+
+```{python}
+full_tweet_data_clean.dog_stage.value_counts()
+```
+
+## Storing Data
+Save gathered, assessed, and cleaned master dataset to a CSV file named "twitter_archive_master.csv".
+
+```{python}
+full_tweet_data_clean.to_csv("twitter_archive_master.csv")
+image_predictions_clean.to_csv("image_predictions_master.csv")
+```
+
+## Analyzing and Visualizing Data
+In this section, analyze and visualize your wrangled data. You must produce at least **three (3) insights and one (1) visualization.**
+
+The vast majority of rating ratios were centered between 1 and 1.25. The plot below was cut off at 2 because there are ouliers that fall on the far positive side of the plot.
+
+```{python}
+plt.hist(full_tweet_data_clean.rating_numerator / full_tweet_data_clean.rating_denominator, bins=10, range=(0,2));
+plt.xlabel("Rating Ratio");
+plt.ylabel("Tweets");
+plt.title("Rating Ratio Distribution");
+```
+
+Based on the below plot, it appears that the favorite counts grew steadily over time, but also had an increase in variance along the y axis.
+
+```{python}
+fig = full_tweet_data_clean.plot(x="timestamp", y="favorite_count", title="Favorite Counts Over Time");
+fig.set_xlabel("Date")
+fig.set_ylabel("Favorites")
+```
+
+From the below plot, we can see that the vast majority of tweets were made from an iphone, and only a few were made from other sources such as TweetDeck, Twitter Web Client, and Vine.
+
+```{python}
+fig = full_tweet_data_clean.source.value_counts().plot.barh(title="Tweet Sources");
+fig.set_xlabel("Tweets")
+fig.set_ylabel("Tweet Source")
+```
+
+### Insights:
+1. Most dog rating ratios were between 1 and 1.25 (numerator / denominator)
+
+2. Over time, the favorite counts grew for each tweet on average and the variance of number of favorites each tweet go also seems to have increased over time.
+
+3. The vast majority of tweets were made on an iPhone, but a few other sources were also used: TweetDeck, Twitter Web Client, and Vine.
+
